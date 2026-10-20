@@ -157,6 +157,20 @@ export function extensionLamp(expected: string, auto: boolean, now = Date.now())
 }
 
 export async function watchPulse(line: string, version = '', mode = ''): Promise<boolean> {
+  let stop = false;
+  // The extension sends several newline-separated ticks in one request.
+  for (const entry of line.split(/\r?\n/)) {
+    if (entry.trim().length === 0)
+      continue;
+
+    const stopped = await watchPulseLine(entry, version, mode);
+    stop = stop || stopped;
+  }
+
+  return stop || pilotStop();
+}
+
+async function watchPulseLine(line: string, version: string, mode: string): Promise<boolean> {
   const text = clip(bareStep(line));
   if (text.length === 0)
     return pilotStop();
@@ -165,6 +179,7 @@ export async function watchPulse(line: string, version = '', mode = ''): Promise
   if (mode === 'full' || mode === 'target' || mode === 'light')
     bag().searchMode = mode;
   bag().silenceNoted = false;
+
   const previous = bag().pulse.line;
   if (readingHang(text) && pulseElapsedMs(text) >= APPLY_CAP_MS) {
     const hang = 'я завис: форма отклика, 30 мин';
@@ -207,6 +222,13 @@ export async function watchPulse(line: string, version = '', mode = ''): Promise
   const paced = paceLine(text);
   const kept = shortStep(previous) || paceLine(previous) ? previous : '';
   bag().pulse = { at: Date.now(), line: step || paced ? text : kept };
+  if (STATE_PULSE.exec(text)?.[1] === 'queue.idle') {
+    if (STATE_PULSE.exec(previous)?.[1] !== 'queue.idle')
+      await mark('extension', 'жду очередь', false);
+
+    return pilotStop();
+  }
+
   if (text.startsWith('я завис') || text === 'сервер молчит') {
     if (holdHang())
       return pilotStop();
