@@ -28,6 +28,8 @@ test('старые /terms /privacy /disclaimer → 301 на /legal/*', () => {
   assert.equal(at('/terms'), '/legal/terms-of-use');
   assert.equal(at('/privacy/'), '/legal/privacy-policy');
   assert.equal(at('/disclaimer?x=1'), '/legal/disclaimer?x=1');
+  assert.equal(at('/consent'), '/legal/consent-personal-data');
+  assert.equal(at('/extension-privacy'), '/legal/chrome-extension-privacy');
   assert.equal(at('/legal/terms-of-use'), null);
   assert.equal(at('/termsx'), null);
   assert.equal(legacyAdminPath(new URL('/terms', 'https://x.test')), null);
@@ -48,9 +50,27 @@ test('markdown: экранирует HTML, рендерит заголовки/�
   const html = renderMarkdown(read('./src/lib/legal/privacy-policy.md'));
   assert.match(html, /<h1>/);
   assert.match(html, /<table>/);
-  assert.match(html, /\[КОНТАКТНЫЙ EMAIL\]/);
+  assert.match(html, /ЧЕРНОВИК/);
   assert.doesNotMatch(html, /<script/);
   const consent = renderMarkdown(read('./src/lib/legal/consent-personal-data.md'));
   assert.match(consent, /<ol>/);
   assert.match(consent, /<strong>Данные:<\/strong>/);
+});
+
+test('каждая ссылка nojobnoproblem.up.railway.app/* из текстов ведёт на /legal/* или редирект', () => {
+  const short = new Set();
+  for (const slug of SLUGS)
+    for (const m of read(`./src/lib/legal/${slug}.md`).matchAll(/nojobnoproblem\.up\.railway\.app(\/[\w-]+)/g))
+      short.add(m[1]);
+  assert.ok(short.size >= 3);
+  for (const path of short)
+    assert.ok(path.startsWith('/legal') || legacyLegalPath(new URL(path, 'https://x.test'))?.startsWith('/legal/'), path);
+});
+
+test('в текстах нет [..]-заглушек и выдуманных реквизитов', () => {
+  for (const slug of SLUGS) {
+    const src = read(`./src/lib/legal/${slug}.md`);
+    assert.doesNotMatch(src, /\[[А-ЯA-Z][^\]]*\]/, slug);
+    assert.doesNotMatch(src, /Иванов|example\.com|0{7,}|г\.\./, slug);
+  }
 });

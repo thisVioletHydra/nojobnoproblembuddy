@@ -8,11 +8,13 @@ export function legacyAdminPath(url: URL): string | null {
   return `/admin/source${path.slice('/admin/hh'.length)}${url.search}`;
 }
 
-// Старые /terms, /privacy, /disclaimer → /legal/* (301).
+// Короткие адреса из текстов и старые /terms, /privacy, /disclaimer, /consent, /extension-privacy → /legal/* (301).
 const LEGAL_MOVED: Record<string, string> = {
   '/terms': '/legal/terms-of-use',
   '/privacy': '/legal/privacy-policy',
   '/disclaimer': '/legal/disclaimer',
+  '/consent': '/legal/consent-personal-data',
+  '/extension-privacy': '/legal/chrome-extension-privacy',
 };
 
 export function legacyLegalPath(url: URL): string | null {
