@@ -124,10 +124,12 @@ onMount(() => {
       {/if}
     </div>
   </section>
-  <p class="disclaimer" data-testid="disclaimer">{DISCLAIMER}</p>
+  <p class="disclaimer" data-testid="disclaimer">{DISCLAIMER} <a class="legal-link" href="/legal" data-testid="legal-link">Документы</a></p>
 </main>
 
 <style>
+  .legal-link { color: inherit; text-decoration: none; opacity: .8; }
+  .legal-link:hover { text-decoration: underline; }
   .disclaimer { position: absolute; left: 0; right: 0; bottom: 10px; z-index: 4; margin: 0 auto; max-width: 720px; padding: 0 16px; text-align: center; font-size: 11px; line-height: 1.4; color: #71717a; }
   :global(body) { margin: 0; background: #0b0d12; }
   .login-scene { position: relative; isolation: isolate; min-height: 100dvh; overflow: hidden; background: #0b0d12; color: #f2f1e9; font-family: system-ui, sans-serif; }

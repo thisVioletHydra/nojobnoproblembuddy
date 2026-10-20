@@ -129,7 +129,7 @@ const current = (href: string, exact: boolean) => {
       </div>
     {/if}
     {@render children()}
-    <p class="mt-10 border-t border-white/5 pt-3 text-[11px] leading-snug text-zinc-500" data-testid="disclaimer">{DISCLAIMER}</p>
+    <p class="mt-10 border-t border-white/5 pt-3 text-[11px] leading-snug text-zinc-500" data-testid="disclaimer">{DISCLAIMER} <a class="text-zinc-500 hover:text-zinc-400 hover:underline" href="/legal" data-testid="legal-link">Документы</a></p>
   </main>
 </div>
 {#if updating}

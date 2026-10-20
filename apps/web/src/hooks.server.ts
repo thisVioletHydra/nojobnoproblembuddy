@@ -16,7 +16,7 @@ import { dlSecret, signDl } from '$lib/server/thin/dl';
 import { policyOf, versionGate } from '$lib/server/thin/version';
 
 import { healthz, isHealthz } from '$lib/server/healthz';
-import { legacyAdminPath } from '$lib/server/legacy-path';
+import { legacyAdminPath, legacyLegalPath } from '$lib/server/legacy-path';
 import { demoAllow, ensureDemoToken, isDemoLogin } from '$lib/server/demo';
 
 import process from 'node:process';
@@ -57,6 +57,10 @@ export const handle: Handle = async ({ event, resolve }) => {
   const moved = legacyAdminPath(event.url);
   if (moved)
     return new Response(null, { status: 308, headers: { location: moved, 'cache-control': 'no-store' } });
+
+  const legal = legacyLegalPath(event.url);
+  if (legal)
+    return new Response(null, { status: 301, headers: { location: legal } });
 
   if (asset(event.url.pathname))
     return resolve(event);

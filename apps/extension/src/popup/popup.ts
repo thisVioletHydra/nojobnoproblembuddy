@@ -177,6 +177,23 @@ async function openAdminSettings(): Promise<void> {
   const base = adminUrl(gate, syncUrlNow) || DEFAULT_ADMIN_URL;
   await browser.tabs.create({ url: `${base.replace(/\/+$/, '')}/extension` });
 }
+// legal: <server>/legal (prod domain when no server is set)
+document.getElementById('legal-link')?.addEventListener('click', (event) => {
+  event.preventDefault();
+  void (async () => {
+    const [gate, syncUrlNow] = await Promise.all([
+      readGate({ get: keys => browser.storage.local.get(keys) as Promise<Record<string, unknown>>, set: async () => {} }).catch(() => null),
+      getSyncUrl().catch(() => ''),
+    ]);
+    const base = adminUrl(gate, syncUrlNow) || DEFAULT_ADMIN_URL;
+    let origin = new URL(DEFAULT_ADMIN_URL).origin;
+    try {
+      origin = new URL(base).origin;
+    }
+    catch {}
+    await browser.tabs.create({ url: `${origin}/legal` });
+  })();
+});
 function flagBox(element: HTMLInputElement | null, key: 'hideJunk' | 'showPop' | 'keepSession' | 'showMachine'): void {
   element?.addEventListener('change', () => {
     if (managedKeys.has(key)) {
