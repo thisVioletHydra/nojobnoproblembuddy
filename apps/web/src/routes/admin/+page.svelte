@@ -288,12 +288,18 @@ const run = $derived(runMeter(stats.autopilot.auto === true, stats.autopilot.run
 function clock(at: number): string {
   return new Intl.DateTimeFormat('ru-RU', {
     timeZone: 'Asia/Bishkek',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
+  }).format(at);
+}
+
+function logDate(at: number): string {
+  return new Intl.DateTimeFormat('ru-RU', {
+    timeZone: 'Asia/Bishkek',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
   }).format(at);
 }
 
@@ -836,7 +842,7 @@ function liveAnswer(result: { type: string; data?: unknown; error?: { message?: 
       <ul use:keepLog class="max-h-80 overflow-x-hidden overflow-y-auto px-3 py-2 [overflow-anchor:none]" onscroll={onLogScroll}>
         {#each journalRows as row (logKey(row))}
           <li data-k={logKey(row)} class="flex items-baseline gap-x-2 py-0.5">
-            <time datetime={new Date(row.at).toISOString()} title="Время по Бишкеку (UTC+6)" class="shrink-0 text-xs text-zinc-500 tabular-nums whitespace-nowrap">{clock(row.at)}</time>
+            <time datetime={new Date(row.at).toISOString()} title="Время по Бишкеку (UTC+6)" class="relative shrink-0 pt-2.5 text-xs text-zinc-500 tabular-nums whitespace-nowrap"><span class="absolute top-0 left-0 text-[8px] leading-[10px] text-zinc-500">{logDate(row.at)}</span>{clock(row.at)}</time>
             <span class="shrink-0 text-xs text-zinc-500 whitespace-nowrap">{whoName[row.who] ?? row.who}</span>
             <span class="min-w-0 flex-1 break-words whitespace-normal {pauseLine(row.text) ? 'text-amber-200' : row.death ? 'text-[#c49090]' : 'text-zinc-200'}">{showLog(row.text)}</span>
           </li>
