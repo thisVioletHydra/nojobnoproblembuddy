@@ -1,9 +1,97 @@
 <script lang="ts">
 import { deserialize } from '$app/forms';
+import { invalidate } from '$app/navigation';
 import { enhance } from '$lib/admin-forms';
 import Out from '$lib/Out.svelte';
 
 let { data } = $props();
+let startingCheck = $state(false);
+const checkJob = $derived(data.checkJob);
+const checkActive = $derived(checkJob?.state === 'queued' || checkJob?.state === 'running');
+
+$effect(() => {
+  if (!checkActive)
+    return;
+
+  let waiting = false;
+  const timer = window.setInterval(async () => {
+    if (waiting)
+      return;
+
+    waiting = true;
+    try {
+      await invalidate('app:provider-checks');
+    }
+    catch {
+      // A temporary disconnect should not stop polling.
+    }
+    finally {
+      waiting = false;
+    }
+  }, 650);
+
+  return () => window.clearInterval(timer);
+});
+
+const activityLines = ['Запускаю пробу…', 'Стучу в API…', 'Ловлю ответ…', 'Кручу фишку…'];
+let activityIndex = $state(0);
+const currentChip = $derived(checkJob?.current ? `${checkJob.id}:${checkJob.checks.length}` : '');
+
+$effect(() => {
+  if (!currentChip)
+    return;
+
+  activityIndex = 0;
+  const timer = window.setInterval(() => {
+    activityIndex = (activityIndex + 1) % activityLines.length;
+  }, 450);
+
+  return () => window.clearInterval(timer);
+});
+
+type CheckTone = 'pending' | 'success' | 'failure' | 'warning';
+
+const checkChips = $derived([
+  ...(checkJob?.checks.map(row => ({ ...row, tone: checkTone(row.ok, row.status) })) ?? []),
+  ...(checkJob?.current ? [{ ...checkJob.current, tone: 'pending' as const, ok: false, status: 0, alternative: '' }] : []),
+]);
+
+const chipIcons: Record<CheckTone, string> = {
+  pending: '',
+  success: '✓',
+  failure: '×',
+  warning: '?',
+};
+
+function checkTone(ok: boolean, status: number): CheckTone {
+  if (ok)
+    return 'success';
+
+  return status === 401 || status === 403 || status === 429 ? 'warning' : 'failure';
+}
+
+function checkLabel(ok: boolean, status: number): string {
+  if (ok)
+    return 'Модель отвечает';
+
+  const labels: Record<number, string> = {
+    0: 'Нет ответа',
+    401: 'Ключ не принят',
+    403: 'Нет доступа',
+    404: 'Модель или адрес не найдены',
+    429: 'Лимит или нет плана',
+  };
+
+  return labels[status] ?? `Ошибка HTTP ${status}`;
+}
+
+function checkTime(at: string): string {
+  return new Date(at).toLocaleTimeString('ru-RU', {
+    timeZone: 'Asia/Bishkek',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 let providerId = $state('groq');
 let key = $state('');
@@ -132,18 +220,102 @@ $effect(() => {
 {/if}
 
 <section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
-  <h2 class="text-base font-semibold text-white">Пробы</h2>
-  {#if data.probes.length === 0}
-    <p class="mt-2 text-sm text-zinc-500">Пока пусто. Запись появится после проверки ключа или пинга цепочки.</p>
-  {:else}
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h2 class="text-base font-semibold text-white">Пробы</h2>
+    {#if data.canPreview && !data.preview && (data.providers.length > 0 || data.localCheckPreview)}
+      <form
+        method="POST"
+        action="?/check"
+        use:enhance={() => {
+          startingCheck = true;
+
+          return async ({ update }) => {
+            try {
+              await update();
+            }
+            finally {
+              startingCheck = false;
+            }
+          };
+        }}
+      >
+        <button class="btn btn-outline btn-sm" type="submit" disabled={startingCheck || checkActive}>
+          {startingCheck || checkActive ? 'Проверяю модели…' : 'Проверить цепочку'}
+        </button>
+      </form>
+    {/if}
+  </div>
+  {#if data.localCheckPreview}
+    <p class="mt-2 text-sm text-zinc-400">Локальное демо · 5 тестовых моделей</p>
+  {/if}
+  {#if checkJob}
+    <div class="mt-3 rounded-xl border border-white/10 px-4 py-4">
+      {#key checkJob.id}
+        {#if checkChips.length > 0}
+          <ol class="probe-chips" aria-label="Результаты по моделям">
+            {#each checkChips as row, index (index)}
+              {@const status = row.tone === 'pending' ? 'Проверяется' : checkLabel(row.ok, row.status)}
+              <li class="probe-chip" data-tone={row.tone} title={`${row.name} · ${row.model}: ${status}${row.alternative ? `. Другой вариант: ${row.alternative}` : ''}`}>
+                <div class="chip-stage" aria-hidden="true">
+                  <div class="chip-disc">
+                    <span class="chip-face chip-front">{row.name.slice(0, 1)}</span>
+                    <span class="chip-face chip-back">{chipIcons[row.tone]}</span>
+                  </div>
+                  {#if row.tone === 'success'}
+                    <span class="chip-sparks">
+                      {#each [-90, -35, 25, 87, 149, 205, 255] as angle (angle)}
+                        <i style:--ray={`${angle}deg`}></i>
+                      {/each}
+                    </span>
+                  {/if}
+                </div>
+                <div class="chip-label">
+                  <span class="chip-provider">{row.name}</span>
+                  {#if row.tone === 'pending'}
+                    {#key activityIndex}
+                      <span class="chip-activity" aria-hidden="true">{activityLines[activityIndex]}</span>
+                    {/key}
+                  {:else}
+                    <span class="chip-model">{row.model}</span>
+                    <span class="sr-only">{status}{row.alternative ? `. Другой вариант: ${row.alternative}` : ''}</span>
+                  {/if}
+                </div>
+              </li>
+            {/each}
+          </ol>
+        {/if}
+      {/key}
+      <div class="probe-progress" role="status">
+        <div class="probe-progress-label">
+          <span>
+            {#if checkJob.state === 'queued'}
+              Проверка в очереди
+            {:else if checkJob.state === 'failed'}
+              Проверка прервалась. Можно запустить её снова.
+            {:else if checkJob.current}
+              Проверяется {checkJob.current.name}
+            {:else if checkJob.state === 'done'}
+              Проверка завершена в {checkTime(checkJob.checkedAt)}
+            {:else}
+              Готовлю следующую проверку
+            {/if}
+          </span>
+          <span class="probe-count">Проверено {checkJob.checks.length} из {checkJob.total}</span>
+        </div>
+      </div>
+    </div>
+  {/if}
+  {#if data.probes.length > 0}
     <ul class="mt-3 divide-y divide-white/6">
       {#each data.probes as row, index (row.name + row.model + row.detail + index)}
         <li class="flex items-baseline justify-between gap-3 py-2 text-sm">
           <span class="min-w-0 truncate text-zinc-100">{row.name} <span class="text-zinc-500">· {row.model}</span></span>
-          <span class="max-w-[55%] shrink-0 truncate text-right font-mono text-xs {row.ok ? 'text-emerald-300' : 'text-rose-300'}">{row.ok ? 'ok' : 'нет'} · {row.detail}</span>
+          <span class="max-w-[55%] shrink-0 truncate text-right font-mono text-xs {row.ok ? 'text-emerald-300' : 'text-rose-300'}">{checkTime(row.at)} · {row.ok ? 'ok' : 'нет'} · {row.detail}</span>
         </li>
       {/each}
     </ul>
+  {:else if !checkJob && !data.localCheckPreview}
+    <p class="mt-2 text-sm text-zinc-500">Пока пусто. Запись появится после проверки ключа или пинга цепочки.</p>
   {/if}
 </section>
 
@@ -265,3 +437,237 @@ $effect(() => {
     <button class="modal-backdrop" type="button" aria-label="Закрыть" onclick={() => openUnlink = false}></button>
   </dialog>
 {/if}
+
+
+<style>
+  .probe-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 1rem 1.1rem;
+    margin: 0;
+    padding: 0.2rem 0 1.15rem;
+    list-style: none;
+  }
+
+  .probe-chip {
+    --chip-color: #aeafff;
+    --chip-fill: #252947;
+    display: grid;
+    justify-items: center;
+    align-content: start;
+    gap: 0.3rem;
+    width: 6.25rem;
+    min-width: 0;
+    text-align: center;
+    animation: chip-arrive 300ms ease-out both;
+  }
+
+  .probe-chip[data-tone='pending'] {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    justify-items: start;
+    gap: 0.7rem;
+    width: 13rem;
+    max-width: 100%;
+    text-align: left;
+  }
+
+  .probe-chip[data-tone='success'] {
+    --chip-color: #6ee7ba;
+    --chip-fill: #17483e;
+  }
+
+  .probe-chip[data-tone='failure'] {
+    --chip-color: #ff939f;
+    --chip-fill: #532733;
+  }
+
+  .probe-chip[data-tone='warning'] {
+    --chip-color: #ffd487;
+    --chip-fill: #4a381f;
+  }
+
+  .chip-stage {
+    width: 3.5rem;
+    height: 3.5rem;
+    position: relative;
+    display: grid;
+    place-items: center;
+    perspective: 12rem;
+  }
+
+  .chip-stage::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px solid color-mix(in srgb, var(--chip-color) 33%, transparent);
+    border-radius: 50%;
+  }
+
+  [data-tone='pending'] .chip-stage::before {
+    border-top-color: var(--chip-color);
+    border-right-color: var(--chip-color);
+    animation: chip-orbit 850ms linear infinite;
+  }
+
+  [data-tone='failure'] .chip-stage {
+    animation: chip-shake 280ms ease-in-out both;
+  }
+
+  .chip-disc {
+    position: relative;
+    width: 2.85rem;
+    height: 2.85rem;
+    transform-style: preserve-3d;
+  }
+
+  [data-tone='success'] .chip-disc,
+  [data-tone='warning'] .chip-disc {
+    animation: chip-flip 420ms ease-in-out both;
+  }
+
+  [data-tone='failure'] .chip-disc {
+    transform: rotateY(180deg);
+  }
+
+  .chip-face {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    border: 1px solid color-mix(in srgb, var(--chip-color) 45%, transparent);
+    backface-visibility: hidden;
+    font-size: 1.55rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .chip-front {
+    color: #c5c5ff;
+    background: #252947;
+  }
+
+  .chip-back {
+    color: var(--chip-color);
+    background: var(--chip-fill);
+    transform: rotateY(180deg);
+  }
+
+  .chip-sparks {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .chip-sparks i {
+    position: absolute;
+    top: calc(50% - 2px);
+    left: calc(50% - 2px);
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--chip-color);
+    animation: chip-splash 460ms 240ms ease-out both;
+  }
+
+  .chip-label {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .chip-provider,
+  .chip-model,
+  .chip-activity {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .chip-provider {
+    color: #e4e4e7;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .chip-model {
+    color: #a1a1aa;
+    font-size: 0.7rem;
+  }
+
+  .chip-activity {
+    color: var(--chip-color);
+    font-size: 0.77rem;
+    animation: activity-enter 180ms ease-out both;
+  }
+
+  .probe-progress {
+    padding-top: 0.3rem;
+  }
+
+  .probe-progress-label {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.65rem;
+    color: #a1a1aa;
+    font-size: 0.78rem;
+  }
+
+  .probe-count {
+    border: 1px solid #323545;
+    border-radius: 999px;
+    padding: 0.12rem 0.48rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  @keyframes chip-arrive {
+    from { opacity: 0; transform: translateX(0.75rem) scale(0.9); }
+    to { opacity: 1; transform: translateX(0) scale(1); }
+  }
+
+  @keyframes activity-enter {
+    from { opacity: 0; transform: translateY(0.2rem); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes chip-orbit {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes chip-flip {
+    from { transform: rotateY(0); }
+    to { transform: rotateY(180deg); }
+  }
+
+  @keyframes chip-shake {
+    0%, 100% { translate: 0; }
+    12%, 34%, 56%, 78% { translate: -3px; }
+    23%, 45%, 67%, 89% { translate: 3px; }
+  }
+
+  @keyframes chip-splash {
+    0% { opacity: 0; transform: rotate(var(--ray)) translateX(1.45rem); }
+    26% { opacity: 1; }
+    100% { opacity: 0; transform: rotate(var(--ray)) translateX(2.45rem) scale(0.35); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .probe-chip, .chip-stage, .chip-stage::before, .chip-disc, .chip-sparks i, .chip-activity {
+      animation: none !important;
+    }
+
+    [data-tone='success'] .chip-disc,
+    [data-tone='warning'] .chip-disc {
+      transform: rotateY(180deg);
+    }
+
+    .chip-sparks {
+      display: none;
+    }
+
+  }
+</style>
