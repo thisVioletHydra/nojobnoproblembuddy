@@ -102,7 +102,7 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
       return true;
     }
 
-    replyJob(reply, pinWorker(tabId));
+    replyJob(reply, pinWorker(tabId, true));
 
     return true;
   },

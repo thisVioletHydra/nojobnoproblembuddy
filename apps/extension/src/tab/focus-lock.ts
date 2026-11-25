@@ -91,8 +91,11 @@ export async function withStayPut<T>(
     hold = null;
     spawned.clear();
     if (opts?.keepSpawned !== true) {
-      for (const id of extras)
-        await browser.tabs.remove(id).catch(() => {});
+      for (const id of extras) {
+        const tab = await browser.tabs.get(id).catch(() => null);
+        if (tab?.pinned === false)
+          await browser.tabs.remove(id).catch(() => {});
+      }
     }
 
     await restoreFocus(prev);

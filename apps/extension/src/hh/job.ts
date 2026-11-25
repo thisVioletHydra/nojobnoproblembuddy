@@ -22,8 +22,20 @@ export function startHhJob(): void {
   watchToasts();
   watchScreenQuestions();
   void bootHistory();
-  setInterval(async () => {
-    if (await serverMode()) return;
+  const timer = setInterval(async () => {
+    try {
+      if (await serverMode())
+        return;
+    }
+    catch (error) {
+      if (error instanceof Error && error.message.includes('Extension context invalidated')) {
+        clearInterval(timer);
+
+        return;
+      }
+
+      throw error;
+    }
 
     if (document.getElementById('cc-hh-overlay') === null)
       mountOverlay();

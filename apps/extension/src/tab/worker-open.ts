@@ -62,8 +62,6 @@ export async function openPinnedWorker(url: string): Promise<WorkerCheck> {
     return { ...pinned, status: 'Запинил уже открытую' };
   }
 
-  const oldId = workerId;
-
   return withStayPut(async () => {
     const created = await browser.tabs.create({ url: href, active: false, pinned: true });
     if (typeof created.id !== 'number')
@@ -71,22 +69,9 @@ export async function openPinnedWorker(url: string): Promise<WorkerCheck> {
 
     await waitTab(created.id);
     const pinned = await pinWorker(created.id);
-    await forgetWorker(oldId, created.id);
 
     return { ...pinned, status: 'Открыл и запинил' };
   }, { keepSpawned: true });
-}
-
-async function forgetWorker(tabId: number | null, createdId: number): Promise<void> {
-  if (typeof tabId !== 'number' || tabId === createdId)
-    return;
-
-  const tab = await browser.tabs.get(tabId).catch(() => null);
-  const url = tab?.url || tab?.pendingUrl || '';
-  if (isHhUrl(url))
-    return;
-
-  await browser.tabs.remove(tabId).catch(() => {});
 }
 
 export async function ensurePinnedHh(): Promise<WorkerCheck> {

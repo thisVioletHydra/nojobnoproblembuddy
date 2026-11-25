@@ -1180,7 +1180,7 @@ void (async () => {
   }
   const node = document.getElementById('cc-update');
   if (node)
-    node.innerHTML = bannerHtml(await updateFlag(area), base);
+    node.innerHTML = bannerHtml(await updateFlag(area), base, browser.runtime.getManifest().version);
   // one source of truth for «server unreachable» (deploy window included): the gate. Down → the yellow
   // «Сервер не на связи — пауза…» line; the 3 s gate-ping (one /api/link) brings the UI back. No /healthz loop here.
   const gate = await paintLinkPanel(document.getElementById('cc-link'), await getSyncUrl(), await getSyncKey(), area).catch(() => null);

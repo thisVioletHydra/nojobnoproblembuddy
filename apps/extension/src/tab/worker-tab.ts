@@ -10,6 +10,7 @@ const USER_PAGE = /\/resume(?:_converter|_print)?(?:\/|$)|\/chat(?:\/|$)/i;
 let shield = 0;
 let tracked: number | null = null;
 const seen = new Set<number>();
+const createdWorkerTabs = new Set<number>();
 
 export type TabRow = {
   id: number;
@@ -123,13 +124,16 @@ async function keepDiscarded(tabId: number): Promise<void> {
   seen.add(tabId);
 }
 
-export async function pinWorker(tabId: number): Promise<WorkerCheck> {
+export async function pinWorker(tabId: number, manual = false): Promise<WorkerCheck> {
   if (await touchKeeps('pin') === false)
     return { ok: false, reason: 'пин' };
 
   const refused = await userPage(tabId);
   if (refused !== null)
     return refused;
+
+  if (manual)
+    createdWorkerTabs.delete(tabId);
 
   return shieldOpen(() => pinLive(tabId));
 }
@@ -318,6 +322,8 @@ async function openOnlyHh(url: string): Promise<WorkerCheck> {
     if (typeof created.id !== 'number')
       throw new Error('не удалось открыть площадку');
 
+    createdWorkerTabs.add(created.id);
+
     return created.id;
   }, { keepSpawned: true });
 
@@ -365,7 +371,7 @@ async function releaseOldPin(previous: number | null, nextId: number): Promise<v
 }
 
 function spareWorkerPin(row: TabRow, previous: number | null, nextId: number): boolean {
-  if (row.id === nextId || row.pinned !== true)
+  if (row.id === nextId || row.pinned !== true || createdWorkerTabs.has(row.id) === false)
     return false;
 
   if (isBotWorkUrl(row.url))
@@ -378,37 +384,13 @@ function spareWorkerPin(row: TabRow, previous: number | null, nextId: number): b
 }
 
 function dropWorkerTab(row: TabRow, workerId: number | null): boolean {
-  if (row.hh === false || userHh(row.url))
-    return false;
-
-  if (row.pinned && isBotWorkUrl(row.url))
-    return true;
-
-  if (row.id !== workerId)
-    return false;
-
-  return row.pinned || isBotWorkUrl(row.url);
+  return createdWorkerTabs.has(row.id) && isBotWorkUrl(row.url) && (row.pinned || row.id === workerId);
 }
 
 function ownWorkTab(rows: TabRow[], workerId: number | null): TabRow | undefined {
-  const pins = rows.filter(row => row.pinned && isBotWorkUrl(row.url));
-  if (typeof workerId === 'number') {
-    const stored = pins.find(row => row.id === workerId);
-    if (stored !== undefined)
-      return stored;
-  }
+  const workTabs = rows.filter(row => createdWorkerTabs.has(row.id) && isBotWorkUrl(row.url));
 
-  if (pins[0] !== undefined)
-    return pins[0];
-
-  if (typeof workerId !== 'number')
-    return undefined;
-
-  const row = rows.find(item => item.id === workerId);
-  if (row === undefined || isHhUrl(row.url) === false || userHh(row.url))
-    return undefined;
-
-  return row;
+  return workTabs.find(row => row.id === workerId) ?? workTabs.find(row => row.pinned);
 }
 
 function userHh(url: string): boolean {
@@ -656,9 +638,13 @@ function delay(ms: number): Promise<void> {
 
 if (inWorker()) {
   browser.tabs.onReplaced.addListener((added, removed) => {
+    if (createdWorkerTabs.delete(removed))
+      createdWorkerTabs.add(added);
+
     void followTab(removed, added);
   });
   browser.tabs.onRemoved.addListener((tabId, info) => {
+    createdWorkerTabs.delete(tabId);
     if (info.isWindowClosing || shield === 0)
       return;
 

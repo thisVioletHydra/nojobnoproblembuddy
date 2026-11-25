@@ -4,73 +4,45 @@
 
 Доступ к API HH отключён. Сценарии работы с HH используют авторизованную вкладку браузера через расширение.
 
-**Your real Chrome / Edge, driven from Cursor.** Same cookies, same logins, same tabs. Not a second Playwright browser.
+Browser extension for job search workflows in Chrome and Edge. The extension runs in the browser. Its local MCP bridge is available for compatible clients when you want to control a tab from an assistant.
 
-Store Browser MCP dies with the MV3 service worker. This one keeps the socket in a native host, talks to Cursor over local MCP, and clicks the page you already have open.
+## Install the extension
 
-<p align="center">
-  <img src="apps/extension/src/icons/icon128.png" width="96" height="96" alt="NoJobNoProblemBuddy" />
-</p>
-
-```
-Cursor  ──stdio MCP──►  Node :18765  ◄──native messaging──  Edge extension
-                                                      │
-                                                      ▼
-                                               your tabs (cookies included)
-```
-
-| Popup | Meaning |
-| --- | --- |
-| **NATIVE** | `connectNative` is up. This is the path that stays alive. |
-| **OFFSCREEN** | Fallback WebSocket. Host missing or crashed. |
-| **OFF** | Cursor MCP is not listening on `127.0.0.1:18765`. |
-
----
-
-## Install
-
-Need **pnpm**, **Node 20+**, and **Edge** (Chrome works the same).
+Requires **pnpm**, **Node 20+**, and **Edge** or **Chrome**.
 
 ```bash
-git clone https://github.com/thisVioletHydra/cursor-chrome.git
-cd cursor-chrome
+git clone https://github.com/thisVioletHydra/nojobnoproblembuddy.git
+cd nojobnoproblembuddy
 pnpm install
 pnpm build
-pnpm install-host
 ```
 
-`install-host` writes native-messaging manifests for Edge and Chrome and pins a stable extension id.
+Open `edge://extensions` or `chrome://extensions`, enable **Developer mode**, and use **Load unpacked** to select `apps/extension/dist`. Reload the extension after rebuilding.
 
-### 1. Load the extension
+## Local updates in Edge
 
-Edge: `edge://extensions` → Developer mode → **Load unpacked** → `apps/extension/dist`.
+Run `./scripts/update-local-edge.sh` from a worktree containing the version you want to install. Load the folder printed by the script once in `edge://extensions` using **Load unpacked**. If Edge already has an older local build, reload it once to activate the update check.
 
-Reload the unpacked build after every `pnpm build`. First load after `install-host` must happen so the `key` in the manifest matches the host.
+The script builds and validates updates before replacing the installed files. The local extension checks for a higher version every 30 seconds and reloads when autopilot is off. Refresh an open HH page if it still has the prior content script.
 
-### 2. Point Cursor at the MCP
+## Optional MCP bridge
 
-In `~/.cursor/mcp.json`:
+Run `pnpm install-host` to register the native-messaging host for Edge and Chrome. Reload the extension after registration so the manifest key matches the registered host.
 
-```json
-{
-  "mcpServers": {
-    "cursor-chrome": {
-      "command": "node",
-      "args": ["/ABS/PATH/cursor-chrome/apps/mcp/dist/index.js"]
-    }
-  }
-}
-```
+Configure your MCP client to launch this stdio server:
 
-Use the absolute path on your machine. Remove or disable the store `browsermcp` entry — two servers on `:18765` will fight.
+| Setting | Value |
+| --- | --- |
+| Command | `node` |
+| Argument | `/ABS/PATH/nojobnoproblembuddy/apps/mcp/dist/index.js` |
 
-Cursor Settings → MCP → **Reload** `cursor-chrome`. New tools (`selector`, `browser_new_tab`, …) do not appear in an old chat until that reload.
+Use the absolute path to your checkout. The bridge listens on `127.0.0.1:18765`. Use one bridge process at a time and reconnect your MCP client after tool schema changes.
 
-### 3. Check the popup
-
-Click the toolbar icon. You want **NATIVE** and the current tab URL. If it says `pnpm install-host`, the native host is not registered for this extension id.
-
----
+| Popup | Bridge status |
+| --- | --- |
+| **NATIVE** | Connected through the native-messaging host. |
+| **OFFSCREEN** | Connected through the fallback WebSocket. |
+| **OFF** | The local bridge is disconnected. |
 
 ## Agent tools
 
@@ -109,7 +81,7 @@ Otherwise snapshot → use `ref`.
 ## Layout
 
 ```
-apps/mcp            Cursor stdio MCP + WebSocket server on 127.0.0.1:18765
+apps/mcp            Stdio MCP + WebSocket server on 127.0.0.1:18765
 apps/native-host    Chrome native messaging relay (Node)
 apps/extension      MV3 unpacked extension (offscreen = fallback WS + keepalive)
 packages/protocol   Shared command names and wire types
@@ -124,7 +96,6 @@ The service worker is not allowed to live forever. `chrome.runtime.connectNative
 - **Edge (or Chrome) must stay running.** Lid close / sleep / quit kills the channel. Background tabs are fine; a dead browser is not.
 - `chrome://`, `edge://`, `about:` — no inject, no click.
 - Screenshot wants a visible tab.
-- After changing MCP tool schemas, **Reload MCP** or start a new chat. The extension reload is not enough.
 - Local only: the socket binds `127.0.0.1`. Nothing is exposed to the LAN.
 
 ---
@@ -136,5 +107,3 @@ pnpm build           # all packages
 pnpm install-host    # register native host for Edge + Chrome
 pnpm dev             # run the MCP in the foreground (debug)
 ```
-
-Requires Cursor with MCP enabled. Unpacked MV3 only — not on the Chrome Web Store.

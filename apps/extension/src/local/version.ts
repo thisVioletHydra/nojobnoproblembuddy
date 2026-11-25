@@ -1,5 +1,4 @@
-// Extension version vs server policy. The server decides (x-ext-version → flag / 426); the extension only
-// stores the flag from response headers and shows a banner with the signed download link.
+// Cached server policy can survive an extension update. Check it against the installed version before rendering.
 import type { StorageArea } from './store.ts';
 
 export const UPDATE_KEY = 'extUpdate:v1';
@@ -25,12 +24,31 @@ export async function updateFlag(area: StorageArea): Promise<UpdateFlag | null> 
   return flag?.outdated ? flag : null;
 }
 
-export function bannerHtml(flag: UpdateFlag | null, base: string): string {
+export function isNewer(target: string, installed: string): boolean {
+  const parts = target.trim().split('.');
+  if (parts.length > 4 || parts.some(part => /^\d+$/.test(part) === false))
+    return false;
+
+  const current = installed.split('.').map(Number);
+  for (let index = 0; index < 4; index++) {
+    const difference = Number(parts[index] ?? 0) - (current[index] ?? 0);
+    if (difference !== 0)
+      return difference > 0;
+  }
+
+  return false;
+}
+
+export function bannerHtml(flag: UpdateFlag | null, base: string, installed: string): string {
   if (!flag)
     return '';
 
+  const blocked = flag.blocked && (flag.min === '' || isNewer(flag.min, installed));
+  if (blocked === false && isNewer(flag.recommended, installed) === false)
+    return '';
+
   const href = flag.url.startsWith('/') ? `${base}${flag.url}` : flag.url;
-  const text = flag.blocked ? `Расширение устарело (минимум ${flag.min}), работа остановлена.` : `Доступна новая версия ${flag.recommended}.`;
+  const text = blocked ? `Расширение устарело (минимум ${flag.min}), работа остановлена.` : `Доступна новая версия ${flag.recommended}.`;
 
   return `<div class="cc-update" role="alert">${text} ${href ? `<a href="${href.replace(/"/g, '')}" target="_blank" rel="noopener">Скачать zip</a>` : ''}</div>`;
 }

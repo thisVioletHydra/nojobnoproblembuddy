@@ -226,7 +226,7 @@ async function serverBase(): Promise<string> {
 
 // Outdated-version banner: the flag comes from the server's response headers (x-ext-outdated / 426).
 async function drawUpdate(): Promise<void> {
-  document.getElementById('update')!.innerHTML = bannerHtml(await updateFlag(storageArea), await serverBase());
+  document.getElementById('update')!.innerHTML = bannerHtml(await updateFlag(storageArea), await serverBase(), browser.runtime.getManifest().version);
 }
 
 // one live /api/link check (page open, new link saved); the gate is written only if it changed

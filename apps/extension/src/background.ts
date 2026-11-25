@@ -9,6 +9,7 @@ import { getWorkerTabId } from './tab/worker-tab';
 import { NATIVE_HOST_NAME } from '@cursor-chrome/protocol';
 import { pageInfo, runCommand } from './link/commands';
 import { installFocusLock } from './tab/focus-lock';
+import { isNewer } from './local/version';
 import { getFlags } from './pilot/flags';
 import { runMakeGood } from './tab/make-good';
 import { postNative as sendNative } from './link/native-post';
@@ -183,6 +184,7 @@ browser.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== ALARM)
     return;
 
+  void reloadLocalBuild().catch(error => console.warn('Local extension update check failed', error));
   void pulseNow();
   void ensureOffscreen().then((fail) => {
     if (fail)
@@ -366,6 +368,21 @@ async function syncNegotiationsIfDue(): Promise<void> {
 
   await browser.storage.local.set({ [NEGOTIATIONS_AT_KEY]: Date.now() });
   await syncNegotiations().catch(() => {});
+}
+
+async function reloadLocalBuild(): Promise<void> {
+  const installed = browser.runtime.getManifest();
+  if (installed.version_name !== `${installed.version} (local)`)
+    return;
+
+  // The installer replaces this file only after a successful build.
+  const response = await fetch(browser.runtime.getURL('local-build-version.txt'), { cache: 'no-store' }).catch(() => null);
+  if (!response?.ok)
+    return;
+
+  const version = await response.text().catch(() => '');
+  if (isNewer(version, installed.version) && (await getFlags()).autoQueue === false)
+    browser.runtime.reload();
 }
 
 async function boot(): Promise<void> {

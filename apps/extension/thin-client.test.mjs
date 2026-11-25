@@ -102,8 +102,10 @@ test('version: x-ext-version only on our /api/*, server flag → banner with the
   assert.equal(readUpdateHeaders(new Headers(), 426).blocked, true);
   const area = mockArea();
   await noteUpdate(area, flag);
-  const html = bannerHtml(await updateFlag(area), 'http://s');
+  const html = bannerHtml(await updateFlag(area), 'http://s', '0.5.134');
+  assert.equal(bannerHtml(flag, 'http://s', '0.6.0'), '');
+  assert.equal(bannerHtml(flag, 'http://s', '0.6.10'), '');
   assert.match(html, /0\.6\.0/);
   assert.match(html, /href="http:\/\/s\/dl\/abc\.def"/);
-  assert.equal(bannerHtml(null, 'http://s'), '');
+  assert.equal(bannerHtml(null, 'http://s', '0.6.0'), '');
 });
