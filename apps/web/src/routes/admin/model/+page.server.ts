@@ -6,7 +6,7 @@ import { error, redirect } from '@sveltejs/kit';
 import { isDemoLogin } from '$lib/server/demo';
 import { chainOf, isCreator, readAccount } from '$lib/server/secrets';
 import { readSession } from '$lib/server/session';
-import { addProviderAdmin, raiseProviderAdmin, removeProviderAdmin, unlinkAdmin, wizardProviderAdmin } from '$lib/server/admin-actions';
+import { addProviderAdmin, raiseProviderAdmin, removeProviderAdmin, unlinkAdmin } from '$lib/server/admin-actions';
 
 const CHECK_GAP_MS = 750;
 const CHECK_STATUS_KEY = 'app:provider-checks';
@@ -149,5 +149,4 @@ export const actions: Actions = {
   remove: removeProviderAdmin,
   raise: raiseProviderAdmin,
   unlink: unlinkAdmin,
-  wizard: wizardProviderAdmin,
 };

@@ -8,7 +8,7 @@ import { tenantLogin } from '../diary/tenant.ts';
 import { createHash } from 'node:crypto';
 import process from 'node:process';
 
-export type ProviderId = 'groq' | 'gemini' | 'zai' | 'openrouter' | 'cohere' | 'deepseek' | 'mistral' | 'xai' | 'custom';
+export type ProviderId = 'groq' | 'gemini' | 'zai' | 'openrouter' | 'cohere' | 'deepseek' | 'mistral' | 'xai' | 'cloudflare' | 'custom';
 
 export type Provider = {
   id: ProviderId;
@@ -35,6 +35,7 @@ export const PRESETS: Preset[] = [
   { id: 'deepseek', name: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', keysUrl: 'https://platform.deepseek.com/api_keys', free: false },
   { id: 'mistral', name: 'Mistral', url: 'https://api.mistral.ai/v1/chat/completions', model: 'mistral-small-latest', keysUrl: 'https://console.mistral.ai/api-keys', free: false },
   { id: 'xai', name: 'xAI Grok', url: 'https://api.x.ai/v1/chat/completions', model: 'grok-4.7', keysUrl: 'https://console.x.ai/team/default/api-keys', free: false },
+  { id: 'cloudflare', name: 'Cloudflare Workers AI', url: '', model: '@cf/qwen/qwen3.8-27b', keysUrl: 'https://dash.cloudflare.com/profile/api-tokens', free: true },
   { id: 'custom', name: 'Свой', url: '', model: '', keysUrl: '', free: false },
 ];
 
@@ -82,6 +83,9 @@ export function asProvider(value: unknown): Provider | null {
 
   const model = typeof row.model === 'string' && row.model.trim().length > 0 ? row.model.trim() : preset.model;
   const url = typeof row.url === 'string' && row.url.trim().length > 0 ? row.url.trim() : preset.url;
+  if (preset.id === 'cloudflare' && !/^https:\/\/api\.cloudflare\.com\/client\/v4\/accounts\/[a-f0-9]{32}\/ai\/v1\/chat\/completions$/i.test(url))
+    return null;
+
   if (model.length === 0 || /^https:\/\//.test(url) === false)
     return null;
 

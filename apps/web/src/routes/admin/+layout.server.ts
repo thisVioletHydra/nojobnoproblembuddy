@@ -2,7 +2,7 @@ import { shortDemoName } from '$lib/demo-name';
 import type { LayoutServerLoad } from './$types';
 
 import { DEMO_NAME, isDemoLogin, isDemoSession } from '$lib/server/demo';
-import { COVER_LETTER, extensionLamp, hiddenCount, parkStaleWaiters, passedCount, PRESETS, providerName, readMemory, readPassed, readQueue, readState, seenCount, watchView } from '@cursor-chrome/hh';
+import { COVER_LETTER, extensionLamp, hiddenCount, parkStaleWaiters, passedCount, PRESETS, presetOf, providerName, readMemory, readPassed, readQueue, readState, seenCount, watchView } from '@cursor-chrome/hh';
 import { boardFrom } from '$lib/server/board';
 import { telegramOn } from '@cursor-chrome/telegram';
 import { redirect } from '@sveltejs/kit';
@@ -165,6 +165,7 @@ const loadInner = async ({ cookies }: Parameters<LayoutServerLoad>[0]) => {
       model: provider.model,
       host: new URL(provider.url).host,
       keyTail: provider.key.slice(-4),
+      canReuseKey: presetOf(provider.id)?.url === provider.url,
     })),
     presets: PRESETS.map(preset => ({ id: preset.id, name: preset.name, model: preset.model, keysUrl: preset.keysUrl, free: preset.free })),
     resumeId: preview ? '' : account.hhResumeId,

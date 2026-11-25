@@ -4,7 +4,8 @@ import type { Provider } from '@cursor-chrome/hh';
 
 import { planFlags } from './thin/plan-wire';
 import { SCENARIOS } from './thin/plan-flags';
-import { asProvider, COVER_LETTER, coveredWaiters, MAX_PROVIDER_CHAIN, distillCorpus, dropWaiters, forgetLinks, notePassed, parseRules, providerName, readQueue, remember, scoreAts, shelvedAmong, splitQueries, splitWaiters, splitWords, staleWaiters, suggestQueries, watchRestart, type QueueItem } from '@cursor-chrome/hh';
+import { asProvider, COVER_LETTER, coveredWaiters, MAX_PROVIDER_CHAIN, distillCorpus, dropWaiters, forgetLinks, notePassed, parseRules, presetOf, providerName, readQueue, remember, scoreAts, shelvedAmong, splitQueries, splitWaiters, splitWords, staleWaiters, suggestQueries, watchRestart, type QueueItem } from '@cursor-chrome/hh';
+import { isFreeModel } from '../free-models';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
 import { chainOf, collapseChain, imitationFromFields, isCreator, newExtToken, publishSecrets, readAccount, readResume, withChain, writeAccount, writeAtsScan } from './secrets';
@@ -623,12 +624,32 @@ export async function addProviderAdmin({ request, cookies }: RequestEvent) {
     return { ok: false, detail: 'это просмотр', wait: 0 };
 
   const form = await request.formData();
-  const provider = asProvider({
-    id: String(form.get('provider') ?? ''),
-    key: String(form.get('key') ?? '').trim(),
-    model: String(form.get('model') ?? '').trim(),
-    url: String(form.get('url') ?? '').trim(),
-  });
+  const id = String(form.get('provider') ?? '');
+  const preset = presetOf(id);
+  const savedIndex = String(form.get('savedKeyIndex') ?? '');
+  const accountId = String(form.get('cloudflareAccountId') ?? '').trim();
+  const model = String(form.get('model') ?? '').trim() || preset?.model || '';
+  if (!isFreeModel(id, model))
+    return { ok: false, detail: 'Выбери модель с доступом на бесплатном тарифе', wait: 0 };
+  let key = String(form.get('key') ?? '').trim();
+  let url = '';
+  if (id === 'cloudflare') {
+    if (!/^[a-f0-9]{32}$/i.test(accountId))
+      return { ok: false, detail: 'Укажи 32-значный Account ID Cloudflare', wait: 0 };
+
+    url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/chat/completions`;
+  }
+
+  if (savedIndex !== '') {
+    const index = Number(savedIndex);
+    const source = Number.isInteger(index) ? chainOf(await readAccount(login))[index] : undefined;
+    if (!source || !preset?.url || source.id !== id || source.url !== preset.url || url.length > 0)
+      return { ok: false, detail: 'Не удалось выбрать ключ этого провайдера. Обнови страницу.', wait: 0 };
+
+    key = source.key;
+  }
+
+  const provider = asProvider({ id, key, model, url });
   if (provider === null)
     return { ok: false, detail: 'не хватает ключа, модели или адреса', wait: 0 };
 

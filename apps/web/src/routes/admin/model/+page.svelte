@@ -1,7 +1,7 @@
 <script lang="ts">
-import { deserialize } from '$app/forms';
 import { invalidate } from '$app/navigation';
 import { enhance } from '$lib/admin-forms';
+import { freeModels, isFreeModel } from '$lib/free-models';
 import Out from '$lib/Out.svelte';
 
 let { data } = $props();
@@ -99,97 +99,37 @@ function checkTime(at: string): string {
 
 let providerId = $state('groq');
 let key = $state('');
+let savedKeyIndex = $state('');
+let cloudflareAccountId = $state('');
 let model = $state('');
-let url = $state('');
 let phase = $state<'idle' | 'checking'>('idle');
 let message = $state('');
 let ok = $state(false);
 let openUnlink = $state(false);
 let phrase = $state('');
 
-// NoJobNoProblemBuddy key wizard (xAI Grok): open console on click, paste on click, test via /api/byok/test.
-const XAI_KEYS_URL = 'https://console.x.ai/team/default/api-keys';
-const XAI_KEY_RE = /^xai-[A-Za-z0-9_-]{20,200}$/;
-let wizKey = $state('');
-let wizMsg = $state('');
-let wizOk = $state<boolean | null>(null);
-let wizCode = $state('');
-const wizMasked = $derived(wizKey ? `${wizKey.slice(0, 4)}${'•'.repeat(12)}${wizKey.slice(-4)}` : '');
-
-async function wizPaste() {
-  wizOk = null;
-  try {
-    const text = (await navigator.clipboard.readText()).trim();
-    wizKey = XAI_KEY_RE.test(text) ? text : '';
-    wizMsg = wizKey ? 'формат ок: xai-…, проверь ключ' : (text ? 'в буфере не ключ xAI (ждём xai-…)' : 'буфер пуст');
-    if (!wizKey)
-      wizOk = false;
-  }
-  catch {
-    wizMsg = 'нет доступа к буферу: вставь ключ в форму ниже вручную';
-    wizOk = false;
-  }
-}
-
-async function wizTest() {
-  wizMsg = 'проверяю…';
-  wizOk = null;
-  try {
-    const res = await fetch('/api/byok/test', { method: 'POST', headers: { 'x-llm-key': wizKey } });
-    const body = await res.json() as { ok?: boolean; code?: string; message?: string };
-    wizCode = body.code ?? '';
-    wizOk = body.ok === true;
-    wizMsg = body.message ?? `сервер ${res.status}`;
-  }
-  catch {
-    wizOk = false;
-    wizMsg = 'нет связи';
-  }
-}
-
-async function wizUse() {
-  const form = new FormData();
-  form.set('key', wizKey);
-  wizMsg = 'добавляю…';
-  try {
-    const res = await fetch('?/wizard', { method: 'POST', body: form, headers: { 'x-sveltekit-action': 'true' } });
-    const result = deserialize(await res.text());
-    const body = (result.type === 'success' ? result.data : null) as { ok?: boolean; detail?: string } | null;
-    const ok = body?.ok === true;
-    wizOk = ok;
-    wizMsg = body?.detail ?? 'не вышло';
-    if (ok) {
-      wizKey = '';
-      location.reload();
-    }
-  }
-  catch {
-    wizOk = false;
-    wizMsg = 'нет связи';
-  }
-}
-
-const preset = $derived(data.presets.find(item => item.id === providerId) ?? data.presets[0]);
-const modelVariants: Record<string, string[]> = {
-  groq: ['openai/gpt-oss-20b', 'qwen/qwen3.8-27b'],
-  gemini: ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'],
-  mistral: ['mistral-medium-3-5'],
-};
-const modelChoices = $derived([...new Set([preset?.model ?? '', ...(modelVariants[providerId] ?? [])].filter(Boolean))]);
-const custom = $derived(providerId === 'custom');
-const ready = $derived(key.trim().length > 0 && (custom === false || (url.trim().startsWith('https://') && model.trim().length > 0)));
+const availablePresets = $derived(data.presets.filter(item => freeModels(item.id).length > 0));
+const preset = $derived(availablePresets.find(item => item.id === providerId) ?? availablePresets[0]);
+const modelChoices = $derived(freeModels(providerId));
+const cloudflare = $derived(providerId === 'cloudflare');
+const savedKeys = $derived(data.providers
+  .map((row, index) => ({ ...row, index }))
+  .filter(row => row.id === providerId && row.canReuseKey));
+const ready = $derived((key.trim().length > 0 || savedKeyIndex !== '')
+  && isFreeModel(providerId, model.trim())
+  && (!cloudflare || /^[a-f0-9]{32}$/i.test(cloudflareAccountId.trim())));
 
 function pick(id: string) {
   providerId = id;
-  const next = data.presets.find(item => item.id === id);
-  model = next?.model ?? '';
-  url = '';
+  model = freeModels(id)[0] ?? '';
+  key = '';
+  savedKeyIndex = '';
+  cloudflareAccountId = '';
   message = '';
 }
-
 $effect(() => {
   if (model.length === 0 && preset)
-    model = preset.model;
+    model = freeModels(preset.id)[0] ?? '';
 });
 </script>
 
@@ -333,47 +273,33 @@ $effect(() => {
 </section>
 
 <section class="mt-4 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
-  <h2 class="text-base font-semibold text-white">Добавить провайдера</h2>
+  <h2 class="text-base font-semibold text-white">Добавить модель с бесплатным доступом</h2>
   <div class="mt-3 flex flex-wrap gap-2">
-    {#each data.presets as item (item.id)}
+    {#each availablePresets as item (item.id)}
       <button
         class="cursor-pointer rounded-full border px-3 py-1.5 text-sm transition {providerId === item.id ? 'border-indigo-400 bg-indigo-500/20 text-white' : 'border-white/10 text-zinc-400 hover:border-white/30 hover:text-zinc-200'}"
         type="button"
         onclick={() => pick(item.id)}
       >
-        {item.name}{#if item.free}<span class="ml-1.5 text-[10px] tracking-wide text-emerald-300 uppercase">free</span>{/if}
+        {item.name}
       </button>
     {/each}
   </div>
 
   {#if preset && preset.keysUrl}
-    <p class="mt-3 text-sm text-zinc-400">Ключ: <Out href={preset.keysUrl} text={preset.keysUrl.replace(/^https:\/\//, '')} />. Модель можно поменять, если у провайдера её переименовали.</p>
-  {:else if custom}
-    <p class="mt-3 text-sm text-zinc-400">Любой сервер с OpenAI-совместимым <span class="font-mono text-xs">POST …/chat/completions</span>.</p>
+    <div class="mt-3 grid gap-2 rounded-xl border border-white/10 p-4 text-sm text-zinc-300">
+      <a class="btn btn-outline btn-sm justify-self-start" href={preset.keysUrl} target="_blank" rel="noopener">Получить ключ {preset.name}</a>
+      {#if cloudflare}
+        <p>Создай API Token для Workers AI. Затем открой <Out href="https://dash.cloudflare.com/?to=/:account/workers-and-pages" text="Workers &amp; Pages" /> и скопируй Account ID из блока Account Details.</p>
+        <p class="text-zinc-400">У Workers Free есть бесплатная дневная квота. <Out href="https://developers.cloudflare.com/workers-ai/platform/pricing/" text="Лимиты и модели" /></p>
+      {:else if providerId === 'openrouter'}
+        <p>Для бесплатного резерва оставь <code>openrouter/free</code> или выбери модель с суффиксом <code>:free</code> из каталога.</p>
+        <p><Out href="https://openrouter.ai/collections/free-models" text="Открыть каталог бесплатных моделей" /></p>
+      {:else}
+        <p>Создай API-ключ в аккаунте с бесплатным тарифом и вставь его ниже.</p>
+      {/if}
+    </div>
   {/if}
-
-  <div class="mt-4 rounded-xl border border-indigo-400/30 bg-indigo-400/5 p-4" data-testid="key-wizard">
-    <p class="text-sm font-semibold text-zinc-100">NoJobNoProblemBuddy · ключ xAI Grok</p>
-    <div class="mt-3 flex flex-wrap items-center gap-3">
-      <a class="btn btn-primary btn-sm" href={XAI_KEYS_URL} target="_blank" rel="noopener">Получить ключ Grok</a>
-      <span class="font-mono text-xs text-zinc-500">{XAI_KEYS_URL}</span>
-    </div>
-    <ol class="mt-3 list-decimal space-y-1 pl-5 text-sm text-zinc-300">
-      <li>Войди в консоль xAI, например через Google.</li>
-      <li>API Keys → Create API key.</li>
-      <li>Скопируй ключ (xai-…) и вернись сюда.</li>
-      <li>«Вставить из буфера» → «Проверить» → «В цепочку».</li>
-    </ol>
-    <div class="mt-3 flex flex-wrap items-center gap-3">
-      <button class="btn btn-sm" type="button" onclick={wizPaste}>Вставить из буфера</button>
-      <input class="input input-bordered input-sm w-72 border-white/10 bg-black/30 font-mono text-xs text-zinc-100" readonly value={wizMasked} placeholder="ключ появится здесь (замаскирован)" />
-      <button class="btn btn-sm" type="button" disabled={!wizKey} onclick={wizTest}>Проверить</button>
-      <button class="btn btn-sm" type="button" disabled={!wizKey || (wizOk !== true && wizCode !== 'key-no-credits')} onclick={wizUse}>В цепочку</button>
-    </div>
-    {#if wizMsg}
-      <p class="mt-2 text-sm {wizOk === true ? 'text-emerald-300' : wizOk === false ? 'text-rose-300' : 'text-zinc-400'}">{wizMsg}</p>
-    {/if}
-  </div>
 
   {#if message}
     <p class="mt-3 font-mono text-xs {ok ? 'text-emerald-300' : 'text-rose-300'}">{message}</p>
@@ -394,25 +320,34 @@ $effect(() => {
         message = typeof body?.detail === 'string' ? body.detail : 'не вышло';
         if (ok) {
           key = '';
+          savedKeyIndex = '';
           await update({ reset: false });
         }
       };
     }}
   >
     <input name="provider" type="hidden" value={providerId} />
-    {#if custom}
-      <input
-        class="input input-bordered h-11 w-full border-white/10 bg-black/30 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
-        name="url"
-        type="url"
-        autocomplete="off"
-        placeholder="https://host/v1/chat/completions"
-        bind:value={url}
-      />
+    {#if savedKeys.length > 0}
+      <label class="grid gap-1 text-sm text-zinc-300">
+        Ключ провайдера
+        <select class="select w-full max-w-md" name="savedKeyIndex" bind:value={savedKeyIndex} disabled={phase === 'checking'}>
+          <option value="">Вставить новый ключ</option>
+          {#each savedKeys as saved (saved.index)}
+            <option value={String(saved.index)}>Использовать ключ …{saved.keyTail} · {saved.model}</option>
+          {/each}
+        </select>
+      </label>
     {/if}
-    <div class="flex items-end gap-3">
+    {#if cloudflare}
+      <label class="grid gap-1 text-sm text-zinc-300">
+        Cloudflare Account ID
+        <input class="input w-full max-w-md" name="cloudflareAccountId" bind:value={cloudflareAccountId} maxlength="32" autocomplete="off" />
+      </label>
+    {/if}
+    <div class="flex flex-wrap items-end gap-3">
+      {#if savedKeyIndex === ''}
       <input
-        class="input input-bordered h-11 min-w-0 flex-1 border-white/10 bg-black/30 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
+        class="input input-bordered h-11 min-w-40 flex-1 border-white/10 bg-black/30 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
         name="key"
         type="password"
         autocomplete="off"
@@ -420,6 +355,7 @@ $effect(() => {
         readonly={phase === 'checking'}
         bind:value={key}
       />
+      {/if}
       <input
         class="input input-bordered h-11 w-56 border-white/10 bg-black/30 font-mono text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
         name="model"
