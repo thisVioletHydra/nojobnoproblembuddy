@@ -4,7 +4,7 @@ import type { Provider } from '@cursor-chrome/hh';
 
 import { planFlags } from './thin/plan-wire';
 import { SCENARIOS } from './thin/plan-flags';
-import { asProvider, COVER_LETTER, coveredWaiters, distillCorpus, dropWaiters, forgetLinks, notePassed, parseRules, providerName, readQueue, remember, scoreAts, shelvedAmong, splitQueries, splitWaiters, splitWords, staleWaiters, suggestQueries, watchRestart, type QueueItem } from '@cursor-chrome/hh';
+import { asProvider, COVER_LETTER, coveredWaiters, MAX_PROVIDER_CHAIN, distillCorpus, dropWaiters, forgetLinks, notePassed, parseRules, providerName, readQueue, remember, scoreAts, shelvedAmong, splitQueries, splitWaiters, splitWords, staleWaiters, suggestQueries, watchRestart, type QueueItem } from '@cursor-chrome/hh';
 import { error } from '@sveltejs/kit';
 import { probeHh, probeModel, probeTelegram } from './checks';
 import { chainOf, collapseChain, imitationFromFields, isCreator, newExtToken, publishSecrets, readAccount, readResume, withChain, writeAccount, writeAtsScan } from './secrets';
@@ -568,13 +568,10 @@ export async function importSetupAdmin({ request, cookies }: RequestEvent) {
     return { ok: false, detail: 'в конфиге кривое резюме', wait: 0 };
 
   const saved = await readAccount(login);
-  let chain = chainOf(saved);
-  for (const provider of accepted) {
-    chain = chain.filter(item => item.id !== provider.id);
-    chain = [...chain, provider];
-  }
+  const chain = collapseChain([...chainOf(saved), ...accepted]);
+  if (chain.length > MAX_PROVIDER_CHAIN)
+    return { ok: false, detail: `В пуле максимум ${MAX_PROVIDER_CHAIN} моделей`, wait: 0 };
 
-  chain = collapseChain(chain);
   const next = withChain({
     ...saved,
     telegramToken: setup.telegramToken,
@@ -640,10 +637,10 @@ export async function addProviderAdmin({ request, cookies }: RequestEvent) {
     return { ok: false, detail: probe.detail, wait: probe.retryAfter };
 
   const saved = await readAccount(login);
-  const chain = collapseChain([
-    ...chainOf(saved).filter(item => item.id !== provider.id),
-    provider,
-  ]);
+  const chain = collapseChain([...chainOf(saved), provider]);
+  if (chain.length > MAX_PROVIDER_CHAIN)
+    return { ok: false, detail: `В пуле максимум ${MAX_PROVIDER_CHAIN} моделей`, wait: 0 };
+
   const next = withChain(saved, chain);
   await writeAccount(login, next);
   publishSecrets(login, next);

@@ -4,7 +4,7 @@ export type { HeldLink, Memory, PassedRow, State } from './diary/index.ts';
 export { LOOK_PER_START, SEARCH_HOURS_ENABLED, MAX_ATTEMPTS, QUEUE_TARGET, SCAN_EVERY_MS, SEND_PER_DAY, WORK_FROM_HOUR, WORK_TO_HOUR } from './limits.ts';
 export { burstPages, DEFAULT_QUERY, freshWalk, serveQueries, splitQueries, stepWalk, suggestQueries, walkFrom, withFrontAi } from './mix/index.ts';
 export type { QueryCursor, Walk, WalkPhase } from './mix/index.ts';
-export { accountsDir, readAccountFile, ANSWER_HINTS, applyAccount, COVER_LETTER, EMPTY_FACTS, loadOwnerAccount, ownerAccountFile, setAnswerHints, setCoverLetter, FACTS, factsText, notesText, parseFacts, setAccountFacts, PRESETS, PROFILE_NOTES, answerQuestion, asAtsFlags, asProvider, asQuestion, askChain, atsFirst, atsSource, chainFromEnv, corpusOn, corpusState, distillCorpus, keepVacancy, modelFromChain, modelsDown, parseChain, pingChain, presetOf, probeProvider, providerName, readProbeLog, scoreAts } from './model/index.ts';
+export { accountsDir, readAccountFile, ANSWER_HINTS, applyAccount, COVER_LETTER, EMPTY_FACTS, loadOwnerAccount, ownerAccountFile, setAnswerHints, setCoverLetter, FACTS, factsText, notesText, parseFacts, setAccountFacts, PRESETS, PROFILE_NOTES, answerQuestion, asAtsFlags, asProvider, asQuestion, askChain, atsFirst, atsSource, chainFromEnv, corpusOn, corpusState, distillCorpus, keepVacancy, MAX_PROVIDER_CHAIN, modelFromChain, modelsDown, parseChain, pingChain, presetOf, probeProvider, providerName, readProbeLog, scoreAts } from './model/index.ts';
 export type { Answer, AtsFlag, Preset, ProbeNote, Provider, ProviderId, Question } from './model/index.ts';
 export { parseCanonSeed, seedCanonOnce } from './review/index.ts';
 export type { CanonSeed } from './review/index.ts';

@@ -5,6 +5,7 @@ import { PING_MS } from '../limits.ts';
 import { noteProbe } from './probe-log.ts';
 import { tenantLogin } from '../diary/tenant.ts';
 
+import { createHash } from 'node:crypto';
 import process from 'node:process';
 
 export type ProviderId = 'groq' | 'gemini' | 'zai' | 'openrouter' | 'cohere' | 'deepseek' | 'mistral' | 'xai' | 'custom';
@@ -38,7 +39,7 @@ export const PRESETS: Preset[] = [
 ];
 
 const REST_MS = 60_000;
-const MAX_CHAIN = 8;
+export const MAX_PROVIDER_CHAIN = 24;
 const resting = new Map<string, number>();
 
 export function presetOf(id: string): Preset | null {
@@ -67,7 +68,7 @@ export function parseChain(raw: string): Provider[] {
   if (Array.isArray(parsed) === false)
     return [];
 
-  return parsed.flatMap(item => (asProvider(item) ? [asProvider(item) as Provider] : [])).slice(0, MAX_CHAIN);
+  return parsed.flatMap(item => (asProvider(item) ? [asProvider(item) as Provider] : [])).slice(0, MAX_PROVIDER_CHAIN);
 }
 
 export function asProvider(value: unknown): Provider | null {
@@ -113,6 +114,24 @@ export function modelFromEnv(): Model | null {
   return modelFromChain(chainFromEnv());
 }
 
+class ProviderHttpError extends Error {
+  readonly retryAfterMs: number;
+
+  constructor(message: string, retryAfterMs: number) {
+    super(message);
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+function retryAfterMs(value: string | null): number {
+  if (!value)
+    return 0;
+
+  const milliseconds = /^\d+(?:\.\d+)?$/.test(value) ? Number(value) * 1000 : Date.parse(value) - Date.now();
+
+  return Number.isFinite(milliseconds) ? Math.max(0, milliseconds) : 0;
+}
+
 export async function completion(provider: Provider, prompt: string, opts: { timeoutMs?: number; maxTokens?: number } = {}): Promise<string> {
   const res = await fetch(provider.url, {
     method: 'POST',
@@ -128,12 +147,15 @@ export async function completion(provider: Provider, prompt: string, opts: { tim
       messages: [{ role: 'user', content: prompt }],
     }),
   });
-  if (res.ok === false)
-    throw new Error(`${providerName(provider)} ${res.status}`);
+  if (!res.ok)
+    throw new ProviderHttpError(`${providerName(provider)} ${res.status}`, retryAfterMs(res.headers.get('retry-after')));
 
-  const body = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+  const body: unknown = await res.json();
+  const text = probeContent(body);
+  if (text === null)
+    throw new Error(`${providerName(provider)}: пустой ответ`);
 
-  return body.choices?.[0]?.message?.content ?? '';
+  return text;
 }
 
 export async function askChain(chain: Provider[], prompt: string, timeoutMs = PING_MS, budgetMs?: number, maxTokens?: number): Promise<{ text: string; provider: Provider }> {
@@ -165,7 +187,7 @@ export async function askChain(chain: Provider[], prompt: string, timeoutMs = PI
       return { text, provider };
     }
     catch (error) {
-      rest(provider);
+      rest(provider, error instanceof ProviderHttpError ? error.retryAfterMs : 0);
       reasons.push(failReason(provider, error));
       if (Date.now() >= deadline) {
         timedOut = true;
@@ -326,15 +348,21 @@ export function parseVerdict(raw: string): { verdict: Verdict; reason: string } 
 }
 
 function restKey(provider: Provider): string {
-  return `${provider.url}|${provider.model}|${provider.key.slice(-6)}`;
+  return createHash('sha256').update(JSON.stringify([provider.url, provider.model, provider.key])).digest('hex');
 }
 
 function isResting(provider: Provider): boolean {
   return (resting.get(restKey(provider)) ?? 0) > Date.now();
 }
 
-function rest(provider: Provider): void {
-  resting.set(restKey(provider), Date.now() + REST_MS);
+function rest(provider: Provider, retryAfter: number): void {
+  const now = Date.now();
+  for (const [key, until] of resting) {
+    if (until <= now)
+      resting.delete(key);
+  }
+
+  resting.set(restKey(provider), now + Math.max(REST_MS, retryAfter));
 }
 
 function hostOf(url: string): string {

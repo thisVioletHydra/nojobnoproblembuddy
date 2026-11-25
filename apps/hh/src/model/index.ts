@@ -6,7 +6,7 @@ export { corpusOn, corpusState, distillCorpus, keepVacancy } from './corpus.ts';
 export { ANSWER_HINTS, COVER_LETTER, EMPTY_FACTS, setAnswerHints, setCoverLetter, FACTS, factsText, notesText, parseFacts, PROFILE_NOTES, setAccountFacts } from './copy.ts';
 export type { AccountFacts, AnswerHints } from './copy.ts';
 export { accountsDir, readAccountFile, applyAccount, loadOwnerAccount, ownerAccountFile } from './account.ts';
-export { asProvider, askChain, chainFromEnv, modelFromChain, modelsDown, parseChain, pingChain, PRESETS, presetOf, probeProvider, providerName } from './model.ts';
+export { asProvider, askChain, chainFromEnv, MAX_PROVIDER_CHAIN, modelFromChain, modelsDown, parseChain, pingChain, PRESETS, presetOf, probeProvider, providerName } from './model.ts';
 export type { Preset, Provider, ProviderId } from './model.ts';
 export { readProbeLog } from './probe-log.ts';
 export type { ProbeNote } from './probe-log.ts';

@@ -83,6 +83,7 @@ function checkLabel(ok: boolean, status: number): string {
     403: 'Нет доступа',
     404: 'Модель или адрес не найдены',
     429: 'Лимит или нет плана',
+    503: 'Провайдер временно недоступен',
   };
 
   return labels[status] ?? `Ошибка HTTP ${status}`;
@@ -195,7 +196,7 @@ $effect(() => {
 <header class="mb-5">
   <p class="text-xs tracking-wide text-zinc-500 uppercase">Модель</p>
   <h1 class="mt-1 text-3xl font-semibold tracking-tight">Цепочка провайдеров</h1>
-  <p class="mt-2 text-sm text-zinc-500">Отвечает первый живой. Упал или упёрся в лимит — идём к следующему, упавший отдыхает минуту. Все ходят в OpenAI-совместимый chat/completions.</p>
+  <p class="mt-2 text-sm text-zinc-500">Модели пробуются по порядку. При ошибке или лимите запрос переходит к следующей, а недоступная модель пробуется снова после паузы.</p>
 </header>
 
 {#if data.providers.length > 0}
@@ -205,7 +206,7 @@ $effect(() => {
       <button class="cursor-pointer rounded-lg px-3 py-1.5 text-sm text-rose-400 transition hover:bg-rose-500 hover:text-white focus-visible:bg-rose-500 focus-visible:text-white focus-visible:outline-none" type="button" onclick={() => { phrase = ''; openUnlink = true; }}>Убрать все</button>
     </div>
     <ol class="mt-3 divide-y divide-white/6">
-      {#each data.providers as row, index (row.host + row.model + row.keyTail)}
+      {#each data.providers as row, index (index)}
         <li class="flex items-center gap-3 py-3 text-sm">
           <span class="grid size-7 shrink-0 place-items-center rounded-full bg-white/8 text-xs text-zinc-300">{index + 1}</span>
           <div class="min-w-0 flex-1">
@@ -286,7 +287,10 @@ $effect(() => {
                     {/key}
                   {:else}
                     <span class="chip-model">{row.model}</span>
-                    <span class="sr-only">{status}{row.alternative ? `. Другой вариант: ${row.alternative}` : ''}</span>
+                    {#if !row.ok}
+                      <span class="chip-reason">{status}</span>
+                    {/if}
+                    <span class="sr-only">{row.ok ? status : ''}{row.alternative ? `. Другой вариант: ${row.alternative}` : ''}</span>
                   {/if}
                 </div>
               </li>
@@ -611,6 +615,12 @@ $effect(() => {
   .chip-model {
     color: #a1a1aa;
     font-size: 0.7rem;
+  }
+
+  .chip-reason {
+    color: var(--chip-color);
+    font-size: 0.7rem;
+    line-height: 1.25;
   }
 
   .chip-activity {

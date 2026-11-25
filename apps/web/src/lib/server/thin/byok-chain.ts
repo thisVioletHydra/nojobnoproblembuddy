@@ -2,7 +2,7 @@
 import type { Provider } from '../../../../../hh/src/model/model.ts';
 import type { KeyCheck } from './byok-check.ts';
 
-import { presetOf } from '../../../../../hh/src/model/model.ts';
+import { MAX_PROVIDER_CHAIN, parseChain, presetOf } from '../../../../../hh/src/model/model.ts';
 import { validXaiKey } from './byok-check.ts';
 
 type Stored = { modelChain: string };
@@ -18,7 +18,7 @@ export function xaiProvider(key: string): Provider {
   return { id: 'xai', key: key.trim(), model: preset.model, url: preset.url };
 }
 
-// Valid key (works or «ключ верный, но нет кредитов») → replaces this login's xai entry, others kept in order.
+// Keep existing models in order when adding a checked key.
 export async function addXaiToChain<A extends Stored>(login: string, key: string, deps: ChainDeps<A>): Promise<{ ok: boolean; detail: string }> {
   if (validXaiKey(key) === false)
     return { ok: false, detail: 'не похоже на ключ xAI (xai-…)' };
@@ -28,14 +28,13 @@ export async function addXaiToChain<A extends Stored>(login: string, key: string
     return { ok: false, detail: check.message };
 
   const saved = await deps.read(login);
-  let chain: Provider[] = [];
-  try {
-    chain = saved.modelChain ? JSON.parse(saved.modelChain) as Provider[] : [];
-  }
-  catch {
-    chain = [];
-  }
-  const next = [...chain.filter(item => item.id !== 'xai'), xaiProvider(key)];
+  const chain = parseChain(saved.modelChain);
+  const provider = xaiProvider(key);
+  const exists = chain.some(item => item.url === provider.url && item.model === provider.model && item.key === provider.key);
+  const next = exists ? chain : [...chain, provider];
+  if (next.length > MAX_PROVIDER_CHAIN)
+    return { ok: false, detail: `В пуле максимум ${MAX_PROVIDER_CHAIN} моделей` };
+
   await deps.write(login, { ...saved, modelChain: JSON.stringify(next) });
 
   return { ok: true, detail: check.ok ? 'Grok добавлен в цепочку' : 'Grok добавлен в цепочку (ключ верный, но нет кредитов)' };

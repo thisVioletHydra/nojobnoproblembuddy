@@ -382,30 +382,18 @@ export function chainOf(account: Pick<Account, 'modelChain'>): Provider[] {
   return parseChain(account.modelChain);
 }
 
-/** Один провайдер на id. У Gemini остаётся 3.8, lite выкидывается. */
 export function collapseChain(chain: Provider[]): Provider[] {
-  const gemini = chain.filter(item => item.id === 'gemini');
-  const keepGemini = gemini.find(item => item.model.includes('3.8')) ?? gemini[0];
   const seen = new Set<string>();
-  const out: Provider[] = [];
-  for (const item of chain) {
-    if (item.id === 'gemini') {
-      if (seen.has('gemini') || keepGemini === undefined || item.model !== keepGemini.model)
-        continue;
 
-      seen.add('gemini');
-      out.push(keepGemini);
-      continue;
-    }
+  return chain.filter((provider) => {
+    const identity = JSON.stringify([provider.url, provider.model, provider.key]);
+    if (seen.has(identity))
+      return false;
 
-    if (seen.has(item.id))
-      continue;
+    seen.add(identity);
 
-    seen.add(item.id);
-    out.push(item);
-  }
-
-  return out;
+    return true;
+  });
 }
 
 export function withChain(account: Account, chain: Provider[]): Account {
