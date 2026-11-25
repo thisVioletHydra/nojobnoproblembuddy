@@ -140,7 +140,25 @@ function watchResumePull(): void {
       return;
 
     const data = event.data;
-    if (typeof data !== 'object' || data === null || data.type !== 'cc-pull-resume')
+    if (typeof data !== 'object' || data === null)
+      return;
+
+    if (data.type === 'cc-read-search-profile-title' && location.pathname === '/admin/source') {
+      const { requestId, resumeId } = data;
+      if (typeof requestId !== 'string' || typeof resumeId !== 'string')
+        return;
+
+      void browser.runtime.sendMessage({ type: 'read-search-profile-title', resumeId }).then((reply) => {
+        const title = typeof reply?.title === 'string' ? reply.title : '';
+        window.postMessage({ type: 'cc-search-profile-title', requestId, title, reason: replyReason(reply) }, location.origin);
+      }).catch(() => {
+        window.postMessage({ type: 'cc-search-profile-title', requestId, title: '', reason: 'Расширение не ответило' }, location.origin);
+      });
+
+      return;
+    }
+
+    if (data.type !== 'cc-pull-resume')
       return;
 
     void browser.runtime.sendMessage({ type: 'pull-resume' }).then((reply) => {

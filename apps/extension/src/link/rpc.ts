@@ -16,7 +16,7 @@ import { guardDetect } from '../apply/detect-hold';
 import { DETECT_LINE } from '../hh/detect-wall';
 import { clearFormHold } from '../apply/form-hold';
 import { forgetHangReport, guardCaptcha, queueBusy, readPausedUntil, readQueueReport, runQueue } from '../apply/queue-run';
-import { pullSavedResume } from '../apply/resume-pull';
+import { pullSavedResume, readSearchProfileTitle } from '../apply/resume-pull';
 import { checkWorker, closePinnedHh, listJobTabs, openHhBackground, openOnHhTab, pinWorker } from '../tab/worker-tab';
 import { ensurePinnedHh, openPinnedWorker } from '../tab/worker-open';
 import { viewItems } from '../diary/history-view';
@@ -176,6 +176,11 @@ export const rpc: Record<string, (message: Record<string, unknown>, reply: Reply
       clearStuckHang();
 
     replyJob(reply, runQueue());
+
+    return true;
+  },
+  'read-search-profile-title': (message, reply, sender) => {
+    replyJob(reply, readSearchProfileTitle(sender?.tab?.url || '', String(message.resumeId ?? '')));
 
     return true;
   },

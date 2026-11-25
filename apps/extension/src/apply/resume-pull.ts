@@ -6,6 +6,7 @@ import { browser } from '../browser-host';
 type Pulled = {
   url: string;
   text: string;
+  title?: string;
   ok: boolean;
   login: boolean;
   guard: boolean;
@@ -34,6 +35,30 @@ export async function pullSavedResume(tabUrl: string): Promise<{ ok: boolean; re
     return text;
 
   return postResume(base, key, id, text);
+}
+
+export async function readSearchProfileTitle(tabUrl: string, id: string): Promise<{ ok: boolean; title?: string; reason?: string }> {
+  const base = await getSyncUrl();
+  if (!adminTab(tabUrl, base) || new URL(tabUrl).pathname !== '/admin/source')
+    return { ok: false, reason: 'Открой настройки поиска на подключённом сервере' };
+
+  if (!/^[a-z0-9]{8,64}$/i.test(id))
+    return { ok: false, reason: 'Проверь ссылку на резюме HH' };
+
+  const tab = await requireWorkerTab().catch(() => null);
+  if (typeof tab?.id !== 'number' || !isHhUrl(tab.url || ''))
+    return { ok: false, reason: 'Закрепи вкладку HH, где ты уже вошёл в аккаунт' };
+
+  const path = `/resume/${id}`;
+  const openResume = tab.url && new URL(tab.url).pathname === path ? await readTab(tab.id) : null;
+  const page = openResume?.title ? openResume : await fetchInPage(tab.id, new URL(path, HH_ROOT).href);
+  if (page?.login)
+    return { ok: false, reason: 'Войди в HH в закреплённой вкладке' };
+
+  if (!page?.ok || page.guard || !page.title || new URL(page.url).pathname !== path)
+    return { ok: false, reason: 'Не удалось прочитать должность из резюме. Проверь ссылку и доступ к нему.' };
+
+  return { ok: true, title: page.title };
 }
 
 function adminTab(tabUrl: string, base: string): boolean {
@@ -170,8 +195,7 @@ async function showUrl(tabId: number, url: string): Promise<void> {
 
 function fetchPrint(url: string): Promise<Pulled> {
   const wall = (html: string) => /отключите vpn|turn off vpn|disable vpn/i.test(html.slice(0, 2500));
-  const textOf = (html: string) => {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
+  const textOf = (doc: Document) => {
     doc.querySelectorAll('script,style,noscript,svg').forEach(node => node.remove());
     const root = doc.querySelector('main') || doc.body;
     const raw = root?.innerText || '';
@@ -187,9 +211,13 @@ function fetchPrint(url: string): Promise<Pulled> {
     const login = res.url.includes('/account/login') || html.includes('data-qa="account-login"');
     const guard = html.includes('ddos-guard') || html.includes('__ddgfp') || wall(html);
 
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const title = (doc.querySelector('[data-qa="resume-block-title-position"]') ?? doc.querySelector('h1'))?.textContent?.trim().slice(0, 50);
+
     return {
       url: res.url,
-      text: login || guard ? '' : textOf(html),
+      title: login || guard ? undefined : title,
+      text: login || guard ? '' : textOf(doc),
       ok: res.ok,
       login,
       guard,
@@ -218,6 +246,7 @@ function readPrintPage(): Pulled {
 
   return {
     url: location.href,
+    title: (document.querySelector('[data-qa="resume-block-title-position"]') ?? document.querySelector('h1'))?.textContent?.trim().slice(0, 50),
     text: login || guard ? '' : raw.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 40_000),
     ok: true,
     login,
@@ -235,7 +264,9 @@ function asPulled(raw: unknown): Pulled | null {
   if (typeof raw.ok !== 'boolean' || typeof raw.login !== 'boolean' || typeof raw.guard !== 'boolean')
     return null;
 
-  return { url: raw.url, text: raw.text, ok: raw.ok, login: raw.login, guard: raw.guard };
+  const title = 'title' in raw && typeof raw.title === 'string' ? raw.title : undefined;
+
+  return { url: raw.url, text: raw.text, ok: raw.ok, login: raw.login, guard: raw.guard, title };
 }
 
 function pause(ms: number): Promise<void> {

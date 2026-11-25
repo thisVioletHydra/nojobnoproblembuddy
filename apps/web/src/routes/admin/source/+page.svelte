@@ -23,6 +23,51 @@ $effect(() => {
   stopDraft = data.stopWords;
   blackDraft = data.blacklist;
 });
+let profileName = $state('');
+let profileQueries = $state('');
+let profileResumeUrl = $state('');
+let profileImportMessage = $state('');
+let profileRequestId = $state('');
+let profileTimer: number | undefined;
+
+function importProfile(): void {
+  const id = profileResumeUrl.trim().match(/^https:\/\/(?:www\.)?hh\.ru\/resume\/([a-z0-9]{8,64})(?:[/?#]|$)/i)?.[1];
+  if (!id) {
+    profileImportMessage = 'Вставь ссылку на резюме HH';
+
+    return;
+  }
+
+  profileImportMessage = '';
+  profileRequestId = crypto.randomUUID();
+  profileTimer = window.setTimeout(() => {
+    profileRequestId = '';
+    profileImportMessage = 'Расширение не ответило. Обнови админку после обновления расширения.';
+  }, 12_000);
+  window.postMessage({ type: 'cc-read-search-profile-title', requestId: profileRequestId, resumeId: id }, location.origin);
+}
+
+function onProfileImport(event: MessageEvent): void {
+  if (!profileRequestId || event.source !== window || event.origin !== location.origin)
+    return;
+
+  const reply = event.data;
+  if (reply?.type !== 'cc-search-profile-title' || reply.requestId !== profileRequestId)
+    return;
+
+  window.clearTimeout(profileTimer);
+  profileRequestId = '';
+  if (typeof reply.title !== 'string' || !reply.title) {
+    profileImportMessage = typeof reply.reason === 'string' && reply.reason ? reply.reason : 'Не удалось прочитать резюме';
+
+    return;
+  }
+
+  profileName ||= reply.title;
+  const lead = /^(?:tech lead|техлид)$/i.test(reply.title);
+  profileQueries ||= lead ? [reply.title, 'Frontend Lead', 'Frontend Team Lead', 'Руководитель группы разработки', 'Ведущий frontend-разработчик'].join('\n') : reply.title;
+  profileImportMessage = 'Проверь название и запросы перед созданием профиля.';
+}
 let phrase = $state('');
 let resumeOpen = $state(false);
 let resumeDraft = $state('');
@@ -36,6 +81,8 @@ function openResume() {
   resumePhase = 'idle';
 }
 </script>
+
+<svelte:window onmessage={onProfileImport} />
 
 <header class="mb-5">
   <p class="text-xs tracking-wide text-zinc-500 uppercase">Сайт вакансий</p>
@@ -58,17 +105,25 @@ function openResume() {
       <form action="?/createSearchProfile" method="POST" class="mt-3 grid gap-3">
         <label class="grid gap-1.5 text-sm text-zinc-300">
           Название профиля
-          <input class="input w-full" name="profileName" maxlength="50" required />
+          <input class="input w-full" name="profileName" maxlength="50" bind:value={profileName} required />
         </label>
         <label class="grid gap-1.5 text-sm text-zinc-300">
           Поисковые запросы, по одному на строку
-          <textarea class="textarea min-h-24 w-full" name="hhQuery" maxlength="4000" required></textarea>
+          <textarea class="textarea min-h-24 w-full" name="hhQuery" maxlength="4000" bind:value={profileQueries} required></textarea>
         </label>
         <label class="grid gap-1.5 text-sm text-zinc-300">
           Ссылка на резюме HH
-          <input class="input w-full" name="hhResumeId" />
+          <input class="input w-full" name="hhResumeId" bind:value={profileResumeUrl} />
         </label>
-        <button class="btn btn-primary justify-self-start" type="submit">Создать и переключить</button>
+        <div class="flex flex-wrap gap-2">
+          <button class="btn btn-outline" type="button" onclick={importProfile} disabled={profileRequestId !== ''}>
+            {profileRequestId ? 'Читаю резюме…' : 'Заполнить из резюме'}
+          </button>
+          <button class="btn btn-primary" type="submit">Создать и переключить</button>
+        </div>
+        {#if profileImportMessage}
+          <p class="text-sm text-zinc-300" role="status">{profileImportMessage}</p>
+        {/if}
       </form>
     </details>
     {#if form?.detail}
