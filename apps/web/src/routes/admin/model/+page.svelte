@@ -74,6 +74,9 @@ function checkLabel(ok: boolean, status: number): string {
   if (ok)
     return 'Модель отвечает';
 
+  if (status >= 200 && status < 300)
+    return 'Модель не прошла пробу';
+
   const labels: Record<number, string> = {
     0: 'Нет ответа',
     401: 'Ключ не принят',
@@ -166,6 +169,12 @@ async function wizUse() {
 }
 
 const preset = $derived(data.presets.find(item => item.id === providerId) ?? data.presets[0]);
+const modelVariants: Record<string, string[]> = {
+  groq: ['openai/gpt-oss-20b', 'qwen/qwen3.8-27b'],
+  gemini: ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'],
+  mistral: ['mistral-medium-3-5'],
+};
+const modelChoices = $derived([...new Set([preset?.model ?? '', ...(modelVariants[providerId] ?? [])].filter(Boolean))]);
 const custom = $derived(providerId === 'custom');
 const ready = $derived(key.trim().length > 0 && (custom === false || (url.trim().startsWith('https://') && model.trim().length > 0)));
 
@@ -410,10 +419,16 @@ $effect(() => {
       <input
         class="input input-bordered h-11 w-56 border-white/10 bg-black/30 font-mono text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-400 focus:outline-none"
         name="model"
+        list="provider-model-choices"
         autocomplete="off"
         placeholder="модель"
         bind:value={model}
       />
+      <datalist id="provider-model-choices">
+        {#each modelChoices as choice (choice)}
+          <option value={choice}></option>
+        {/each}
+      </datalist>
       <button class="btn btn-primary h-11 min-h-11 shrink-0 px-4" type="submit" disabled={ready === false || phase === 'checking'}>
         {phase === 'checking' ? 'Проверяю' : 'Проверить и добавить'}
       </button>

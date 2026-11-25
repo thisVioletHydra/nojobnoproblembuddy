@@ -212,6 +212,11 @@ export async function probeProvider(provider: Provider, timeoutMs = PING_MS): Pr
 }
 
 async function runProbe(provider: Provider, timeoutMs: number): Promise<{ ok: boolean; detail: string; status: number }> {
+  const left = 100 + Math.floor(Math.random() * 900);
+  const right = 100 + Math.floor(Math.random() * 900);
+  const expected = left + right;
+  const code = `probe-${Math.random().toString(36).slice(2, 10)}`;
+
   let res: Response;
   try {
     res = await fetch(provider.url, {
@@ -223,8 +228,11 @@ async function runProbe(provider: Provider, timeoutMs: number): Promise<{ ok: bo
       },
       body: JSON.stringify({
         model: provider.model,
-        max_tokens: 1,
-        messages: [{ role: 'user', content: 'ok' }],
+        max_tokens: 256,
+        messages: [{
+          role: 'user',
+          content: `Calculate ${left} + ${right}. Return only a JSON object with two keys: "sum" as a number and "code" as the exact string "${code}". Do not include an explanation.`,
+        }],
       }),
     });
   }
@@ -245,7 +253,45 @@ async function runProbe(provider: Provider, timeoutMs: number): Promise<{ ok: bo
   if (res.ok === false)
     return { ok: false, detail: `${name} ${res.status}`, status: res.status };
 
+  const body: unknown = await res.json().catch(() => null);
+  const content = probeContent(body);
+  if (content === null)
+    return { ok: false, detail: `${name}: нет текста ответа`, status: res.status };
+
+  if (!matchesProbe(content, expected, code))
+    return { ok: false, detail: `${name}: неверный ответ на пробу`, status: res.status };
+
   return { ok: true, detail: `${name} · ${provider.model}`, status: res.status };
+}
+
+function probeContent(body: unknown): string | null {
+  if (typeof body !== 'object' || body === null || !('choices' in body) || !Array.isArray(body.choices))
+    return null;
+
+  const choice: unknown = body.choices[0];
+  if (typeof choice !== 'object' || choice === null || !('message' in choice))
+    return null;
+
+  const message = choice.message;
+  if (typeof message !== 'object' || message === null || !('content' in message) || typeof message.content !== 'string')
+    return null;
+
+  return message.content.trim() || null;
+}
+
+function matchesProbe(content: string, expected: number, code: string): boolean {
+  const json = content.replace(/^```(?:json)?\s*([\s\S]+?)\s*```$/i, '$1');
+  let result: unknown;
+  try {
+    result = JSON.parse(json);
+  }
+  catch {
+    return false;
+  }
+
+  return typeof result === 'object' && result !== null
+    && 'sum' in result && result.sum === expected
+    && 'code' in result && result.code === code;
 }
 
 export async function pingChain(chain: Provider[]): Promise<string[]> {
