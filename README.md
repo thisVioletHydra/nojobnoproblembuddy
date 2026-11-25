@@ -1,5 +1,9 @@
 # NoJobNoProblemBuddy
 
+## API HH НЕТ
+
+Доступ к API HH отключён. Сценарии работы с HH используют авторизованную вкладку браузера через расширение.
+
 **Your real Chrome / Edge, driven from Cursor.** Same cookies, same logins, same tabs. Not a second Playwright browser.
 
 Store Browser MCP dies with the MV3 service worker. This one keeps the socket in a native host, talks to Cursor over local MCP, and clicks the page you already have open.
