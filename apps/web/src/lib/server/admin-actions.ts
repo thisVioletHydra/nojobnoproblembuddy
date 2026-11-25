@@ -1,5 +1,5 @@
 import type { RequestEvent } from '@sveltejs/kit';
-import type { Stored } from './secrets';
+import type { SearchProfile, SearchSettings, Stored } from './secrets';
 import type { Provider } from '@cursor-chrome/hh';
 
 import { planFlags } from './thin/plan-wire';
@@ -153,6 +153,65 @@ export async function saveQueryAdmin({ request, cookies }: RequestEvent) {
   publishSecrets(login, next);
 
   return { ok: true, detail: query, wait: 0 };
+}
+
+export async function switchSearchProfile({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'Это просмотр' };
+
+  const form = await request.formData();
+  const name = String(form.get('profileName') ?? '').trim();
+  const account = await readAccount(login);
+  if (name === account.searchProfileName)
+    return { ok: true, detail: 'Профиль уже активен' };
+
+  const saved = account.savedSearchProfiles.find(profile => profile.name === name);
+  if (saved === undefined)
+    return { ok: false, detail: 'Профиль не найден' };
+
+  await activateSearchProfile(login, account, saved);
+
+  return { ok: true, detail: `Активен профиль «${name}»` };
+}
+
+export async function createSearchProfile({ request, cookies }: RequestEvent) {
+  const login = guard(cookies);
+  if (viewingGuest(cookies, login))
+    return { ok: false, detail: 'Это просмотр' };
+
+  const form = await request.formData();
+  const name = String(form.get('profileName') ?? '').trim();
+  const account = await readAccount(login);
+  const names = [account.searchProfileName, ...account.savedSearchProfiles.map(profile => profile.name)];
+  if (name.length === 0 || name.length > 50 || names.some(existing => existing.toLowerCase() === name.toLowerCase()))
+    return { ok: false, detail: 'Укажи новое имя профиля до 50 символов' };
+
+  const queries = splitQueries(String(form.get('hhQuery') ?? '').slice(0, 4000)).filter(line => !line.startsWith('-'));
+  if (queries.length === 0)
+    return { ok: false, detail: 'Добавь хотя бы один поисковый запрос' };
+
+  const resume = String(form.get('hhResumeId') ?? '').trim();
+  const hhResumeId = resumeIdOf(resume);
+  if (resume.length > 0 && !/^[A-Za-z0-9]{8,}$/.test(hhResumeId))
+    return { ok: false, detail: 'Проверь ссылку на резюме' };
+
+  await activateSearchProfile(login, account, {
+    name,
+    settings: { hhQuery: queries.join('\n'), hhRules: '', hhResumeId, coverLetter: '' },
+  });
+
+  return { ok: true, detail: `Создан профиль «${name}»` };
+}
+
+async function activateSearchProfile(login: string, account: Awaited<ReturnType<typeof readAccount>>, profile: SearchProfile): Promise<void> {
+  const { hhResumeId, hhQuery, hhRules, coverLetter } = account;
+  const settings: SearchSettings = { hhResumeId, hhQuery, hhRules, coverLetter };
+  const savedSearchProfiles = account.savedSearchProfiles.filter(saved => saved.name !== profile.name);
+  savedSearchProfiles.push({ name: account.searchProfileName, settings });
+  const next = { ...account, ...profile.settings, searchProfileName: profile.name, savedSearchProfiles };
+  await writeAccount(login, next);
+  publishSecrets(login, next);
 }
 
 export async function saveFilterAdmin({ request, cookies }: RequestEvent) {

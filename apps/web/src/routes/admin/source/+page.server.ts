@@ -1,11 +1,13 @@
 import type { Actions, PageServerLoad } from './$types';
 
 import { corpusState, parseRules } from '@cursor-chrome/hh';
-import { distillAdmin, saveCorpusAdmin, saveFilterAdmin, saveQueryAdmin, saveResumeAdmin, saveRulesAdmin, suggestQueryAdmin, unlinkAdmin, verifyAdmin } from '$lib/server/admin-actions';
+import { createSearchProfile, distillAdmin, saveCorpusAdmin, saveFilterAdmin, saveQueryAdmin, saveResumeAdmin, saveRulesAdmin, suggestQueryAdmin, switchSearchProfile, unlinkAdmin, verifyAdmin } from '$lib/server/admin-actions';
 import { isCreator, readAccount } from '$lib/server/secrets';
 import { githubLogin, readSession } from '$lib/server/session';
 
 const emptyRules = {
+  activeSearchProfile: '',
+  savedSearchProfiles: [] as string[],
   stopWords: '',
   mustWords: '',
   salaryMin: '',
@@ -28,6 +30,8 @@ export const load: PageServerLoad = async ({ cookies }) => {
 
   return {
     ...ruleFields(account.hhRules),
+    activeSearchProfile: account.searchProfileName,
+    savedSearchProfiles: account.savedSearchProfiles.map(profile => profile.name),
     corpusOn: account.hhCorpus === '1',
     corpusCount: corpus.count,
     corpusBrief: corpus.brief,
@@ -58,6 +62,8 @@ function parsedRules(raw: string): unknown {
 }
 
 export const actions: Actions = {
+  createSearchProfile,
+  switchSearchProfile,
   verify: verifyAdmin,
   resume: saveResumeAdmin,
   query: saveQueryAdmin,

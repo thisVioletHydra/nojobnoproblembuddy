@@ -67,7 +67,16 @@ export const IMITATION: Imitation = {
   fastMax: 4,
 };
 
+export type SearchSettings = Pick<Stored, 'hhQuery' | 'hhRules' | 'hhResumeId' | 'coverLetter'>;
+
+export type SearchProfile = {
+  name: string;
+  settings: SearchSettings;
+};
+
 export type Account = Stored & {
+  searchProfileName: string;
+  savedSearchProfiles: SearchProfile[];
   balance: number;
   history: Charge[];
   imitation: Imitation;
@@ -90,6 +99,8 @@ const empty = (): Account => ({
   hhClientSecret: '',
   hhResumeId: '',
   hhQuery: '',
+  searchProfileName: 'Frontend',
+  savedSearchProfiles: [],
   hhRules: '',
   hhCorpus: '',
   hhLive: '',

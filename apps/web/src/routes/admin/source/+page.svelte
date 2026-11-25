@@ -2,7 +2,7 @@
 import { enhance } from '$lib/admin-forms';
 import Out from '$lib/Out.svelte';
 
-let { data } = $props();
+let { data, form } = $props();
 let openUnlink = $state(false);
 let queryDraft = $state('');
 let stopDraft = $state('');
@@ -41,6 +41,41 @@ function openResume() {
   <p class="text-xs tracking-wide text-zinc-500 uppercase">Сайт вакансий</p>
   <h1 class="mt-1 text-3xl font-semibold tracking-tight">Отклики</h1>
 </header>
+
+{#if data.activeSearchProfile}
+  <section class="mb-4 grid gap-3 rounded-2xl border border-white/8 bg-[#151922] px-5 py-4">
+    <h2 class="text-base font-semibold text-white">Профиль поиска</h2>
+    <p class="text-sm text-zinc-300">Активен: <strong>{data.activeSearchProfile}</strong></p>
+    {#if data.savedSearchProfiles.length > 0}
+      <form action="?/switchSearchProfile" method="POST" class="flex flex-wrap gap-2">
+        {#each data.savedSearchProfiles as name (name)}
+          <button class="btn btn-outline" type="submit" name="profileName" value={name}>Переключить на {name}</button>
+        {/each}
+      </form>
+    {/if}
+    <details>
+      <summary class="cursor-pointer text-sm text-indigo-300">Добавить профиль</summary>
+      <form action="?/createSearchProfile" method="POST" class="mt-3 grid gap-3">
+        <label class="grid gap-1.5 text-sm text-zinc-300">
+          Название профиля
+          <input class="input w-full" name="profileName" maxlength="50" required />
+        </label>
+        <label class="grid gap-1.5 text-sm text-zinc-300">
+          Поисковые запросы, по одному на строку
+          <textarea class="textarea min-h-24 w-full" name="hhQuery" maxlength="4000" required></textarea>
+        </label>
+        <label class="grid gap-1.5 text-sm text-zinc-300">
+          Ссылка на резюме HH
+          <input class="input w-full" name="hhResumeId" />
+        </label>
+        <button class="btn btn-primary justify-self-start" type="submit">Создать и переключить</button>
+      </form>
+    </details>
+    {#if form?.detail}
+      <p class="text-sm text-zinc-300" role="status">{form.detail}</p>
+    {/if}
+  </section>
+{/if}
 
 <div class="mb-4 grid gap-3">
   {#if data.resumeId}
